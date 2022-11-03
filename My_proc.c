@@ -1,125 +1,177 @@
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/string.h>
-#include <linux/sched.h>
-#include <asm/current.h>
-#include <linux/proc_fs.h>
-#include <linux/uaccess.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-#define HAVE_PROC_OPS
-#endif
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
-#define PROCFS_MAX_SIZE 1024 
-#define procfs_name "thread_info"
+int **result;
+int **matrix1;
+int **matrix2;
 
-struct proc_dir_entry *Our_Proc_File;
-
-/* The buffer used to store character for this module */ 
-
-static char procfs_buffer[PROCFS_MAX_SIZE]; 
-
-char stringforuser[PROCFS_MAX_SIZE]; 
-
-
-/* The size of the buffer */ 
-
-static unsigned long procfs_buffer_size = 0; 
-
-ssize_t procfile_read(struct file *filePointer,
-                      char *buffer,
-                      size_t buffer_length,
-                      loff_t *offset)
-{
-    int len = sizeof(stringforuser);
-    ssize_t ret = len;    // 使用 copy_to_user ， 將資料從 kernel space 複製到 user space
-    if (*offset >= len || copy_to_user(buffer, stringforuser, len)) {
-        pr_info("copy_to_user failed\n");
-        ret = 0;
-    } else {
-        pr_info("procfile read %s\n", filePointer->f_path.dentry->d_name.name);
-        *offset += len;
-    }    
-    
-    return ret;
+void *threadRun(int *arg){
+    for(int k=arg[2];k<arg[3];k++){
+        for(int i=0;i<arg[0];i++){
+            int total=0;
+            for(int j=0;j<arg[1];j++){
+                total+=matrix1[i][j]*matrix2[j][k];
+            }
+            result[i][k]=total;
+            //printf("k: %d,%d\n",k,total);
+        }
+    }
+    pid_t tid=gettid();
+    //printf(" %d\n",tid);
+    char data[BUFSIZ];
+    sprintf(data,"%d",tid);
+    int fd = open("/proc/thread_info", O_RDWR);
+    if(fd == -1)
+    {
+      printf("/proc/thread_info does not exist\n");
+      return 1;
+    }
+    write(fd, data, strlen(data));
+    //read(fd, readbuffer, 100);
+    //printf("\t%s\n",readbuffer);
+    close(fd);
+    pthread_exit(NULL);
 }
 
-/* This function is called with the /proc file is written. */ 
-
-static ssize_t procfile_write(struct file *file, const char __user *buff, 
-
-                              size_t len, loff_t *off) 
-
-{ 
-
-    procfs_buffer_size = len; 
-
-    if (procfs_buffer_size > PROCFS_MAX_SIZE) 
-
-        procfs_buffer_size = PROCFS_MAX_SIZE; 
-
- 
-
-    if (copy_from_user(procfs_buffer, buff, procfs_buffer_size)) 
-
-        return -EFAULT; 
-
- 
-
-    procfs_buffer[procfs_buffer_size & (PROCFS_MAX_SIZE - 1)] = '\0'; 
-
-    *off += procfs_buffer_size; 
-
-    pr_info("procfile write %s\n", procfs_buffer); 
-
-    long long unsigned uutime=((current->utime)/100)/1000;
+int main(int argc, char *argv[]){
+    int row1;
+    int column1;
+    int row2;
+    int column2;
+    int threadnum = strtol(argv[1],NULL,10);
+    //printf("%d\n",threadnum);
     
-    snprintf(stringforuser, PROCFS_MAX_SIZE, "ThreadID:%s Time:%llu(ms) context switch times:%lu", procfs_buffer, uutime, current->nvcsw+current->nivcsw);
+    //printf("%d\n",argc);
+    for(int i=0;i<argc;i++){
+        //printf("%s\n",argv[i]);
+    }
+    FILE* input_file1=fopen(argv[2],"r");
+    FILE* input_file2=fopen(argv[3],"r");
+    if(!input_file1) 
+        exit(EXIT_FAILURE);
+    if(!input_file2) 
+        exit(EXIT_FAILURE);
 
- 
+    fscanf(input_file1, "%d %d\n", &row1, &column1);
+    fscanf(input_file2, "%d %d\n", &row2, &column2);
+    //int matrix1[row1][column1];
+    //int matrix2[row2][column2];
 
-    return procfs_buffer_size; 
+    matrix1=(int**)malloc(sizeof(int*)*row1);
+    for(int i=0;i<row1;i++){
+        matrix1[i]=(int*)malloc(sizeof(int)*column1);
+    }
 
-} 
+    matrix2=(int**)malloc(sizeof(int*)*row2);
+    for(int i=0;i<row2;i++){
+        matrix2[i]=(int*)malloc(sizeof(int)*column2);
+    }
 
 
+    for(int i=0;i<row1;i++){
+        for(int j=0;j<column1;j++){
+            fscanf(input_file1, "%d " ,&matrix1[i][j]);
+        }
+    }
 
-#ifdef HAVE_PROC_OPS
-static const struct proc_ops proc_file_fops = {
-    .proc_read = procfile_read,
-    .proc_write = procfile_write, 
-};
-#else
-static const struct file_operations proc_file_fops = {
-    .read = procfile_read,
-    .write = procfile_write, 
-};
-
-#endif
-
-static int __init procfs1_init(void)
-{
-    // 建立一個 /proc/* 檔案，該檔的操作為 proc_file_fops 所定義
-    Our_Proc_File = proc_create(procfs_name, 0644, NULL, &proc_file_fops);    
+    for(int i=0;i<row2;i++){
+        for(int j=0;j<column2;j++){
+            fscanf(input_file2, "%d " ,&matrix2[i][j]);
+        }
+    }
     
-    if (NULL == Our_Proc_File) {
-        proc_remove(Our_Proc_File);
-        pr_alert("Error:Could not initialize /proc/%s\n", procfs_name);
-        return -ENOMEM;
-    }    
+    //printf("%d %d\n",row1,column1);
+    //printf("%d %d\n",row2,column2);
+    /*
+    for(int i=0;i<row1;i++){
+        for(int j=0;j<column1;j++){
+            printf("%d",matrix1[i][j]);
+        }
+        printf("\n");
+    }
     
-    pr_info("/proc/%s created\n", procfs_name);
+    for(int i=0;i<row2;i++){
+        for(int j=0;j<column2;j++){
+            printf("%d",matrix2[i][j]);
+        }
+        printf("\n");
+    }
+    */
+    
+
+    // malloc output matrix size
+
+    result=(int**)malloc(sizeof(int*)*row1);
+    for(int i=0;i<row1;i++){
+        result[i]=(int*)malloc(sizeof(int)*column2);
+    }
+
+
+    //printf("PID:%d\n",getpid());
+
+    pthread_t t[threadnum];
+
+    int **childthreadwork=(int**)malloc(sizeof(int*)*threadnum);
+
+    for(int a=0;a<threadnum;a++){
+        childthreadwork[a]=(int*)malloc(sizeof(int)*4);
+        childthreadwork[a][0]=row1;
+        childthreadwork[a][1]=column1;
+        //childthreadwork[a][2]=(column2*(a+1))/(threadnum+1);
+        //childthreadwork[a][3]=((column2*(a+2))/(threadnum+1));
+        childthreadwork[a][2]=(column2*(a))/(threadnum);
+        childthreadwork[a][3]=((column2*(a+1))/(threadnum));
+        //printf("left:%d, right:%d thread: %d\n",childthreadwork[a][2], childthreadwork[a][3], a);
+        pthread_create(&t[a], NULL, threadRun, childthreadwork[a]);
+    }
+
+    /*
+    for(int k=0;k<(column2/(threadnum+1));k++){
+        for(int i=0;i<row1;i++){
+            int total=0;
+            for(int j=0;j<column1;j++){
+                total+=matrix1[i][j]*matrix2[j][k];
+            }
+            result[i][k]=total;
+        }
+    }
+    */
+
+    for(int b=0;b<threadnum;b++){
+        //write(fd, data, 32768);
+        pthread_join(t[b], NULL);
+    }
+
+    int fd = open("/proc/thread_info", O_RDWR);
+    if(fd == -1)
+    {
+      printf("/proc/thread_info does not exist\n");
+      return 1;
+    }
+    char readbuffer[BUFSIZ]={"\0"};
+    read(fd, readbuffer, BUFSIZ);
+    printf("%s",readbuffer);
+
+    /*
+    for(int i=0;i<row1;i++){
+        for(int j=0;j<column2;j++){
+            printf("%d ",result[i][j]);
+        }
+        printf("\n");
+    }
+    */
+
+    free(result);
+    free(matrix1);
+    free(matrix2);
+    fclose(input_file1);
+    fclose(input_file2);
+    close(fd);
     return 0;
 }
-
-static void __exit procfs1_exit(void)
-{
-    // 使用 proc_remove 刪除該檔案
-    proc_remove(Our_Proc_File);
-    pr_info("/proc/%s removed\n", procfs_name);
-}
-
-module_init(procfs1_init);
-module_exit(procfs1_exit);
-
-MODULE_LICENSE("GPL");
