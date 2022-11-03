@@ -43,7 +43,7 @@ ssize_t procfile_read(struct file *filePointer,
         pr_info("procfile read %s\n", filePointer->f_path.dentry->d_name.name);
         *offset += len;
     }    
-    
+    strcpy(stringforuserglobal,"");
     return ret;
 }
 
