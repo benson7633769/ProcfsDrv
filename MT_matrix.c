@@ -25,7 +25,6 @@ void *threadRun(int *arg){
     pid_t tid=gettid();
     //printf(" %d\n",tid);
     char data[BUFSIZ];
-    char readbuffer[1024]={"\0"};
     sprintf(data,"%d",tid);
     int fd = open("/proc/thread_info", O_RDWR);
     if(fd == -1)
@@ -34,8 +33,8 @@ void *threadRun(int *arg){
       return 1;
     }
     write(fd, data, strlen(data));
-    read(fd, readbuffer, 100);
-    printf("\t%s\n",readbuffer);
+    //read(fd, readbuffer, 100);
+    //printf("\t%s\n",readbuffer);
     close(fd);
     pthread_exit(NULL);
 }
@@ -46,11 +45,11 @@ int main(int argc, char *argv[]){
     int row2;
     int column2;
     int threadnum = strtol(argv[1],NULL,10);
-    printf("%d\n",threadnum);
+    //printf("%d\n",threadnum);
     
     //printf("%d\n",argc);
     for(int i=0;i<argc;i++){
-        printf("%s\n",argv[i]);
+        //printf("%s\n",argv[i]);
     }
     FILE* input_file1=fopen(argv[2],"r");
     FILE* input_file2=fopen(argv[3],"r");
@@ -87,8 +86,8 @@ int main(int argc, char *argv[]){
         }
     }
     
-    printf("%d %d\n",row1,column1);
-    printf("%d %d\n",row2,column2);
+    //printf("%d %d\n",row1,column1);
+    //printf("%d %d\n",row2,column2);
     /*
     for(int i=0;i<row1;i++){
         for(int j=0;j<column1;j++){
@@ -114,7 +113,7 @@ int main(int argc, char *argv[]){
     }
 
 
-    printf("PID:%d\n",getpid());
+    //printf("PID:%d\n",getpid());
 
     pthread_t t[threadnum];
 
@@ -148,6 +147,17 @@ int main(int argc, char *argv[]){
         //write(fd, data, 32768);
         pthread_join(t[b], NULL);
     }
+
+    int fd = open("/proc/thread_info", O_RDWR);
+    if(fd == -1)
+    {
+      printf("/proc/thread_info does not exist\n");
+      return 1;
+    }
+    char readbuffer[BUFSIZ]={"\0"};
+    read(fd, readbuffer, BUFSIZ);
+    printf("%s",readbuffer);
+
     /*
     for(int i=0;i<row1;i++){
         for(int j=0;j<column2;j++){
@@ -162,5 +172,6 @@ int main(int argc, char *argv[]){
     free(matrix2);
     fclose(input_file1);
     fclose(input_file2);
+    close(fd);
     return 0;
 }
