@@ -6,10 +6,13 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <sys/time.h>
 
 int **result;
 int **matrix1;
 int **matrix2;
+pthread_mutex_t mutex;
 
 void *threadRun(int *arg){
     for(int k=arg[2];k<arg[3];k++){
@@ -32,10 +35,12 @@ void *threadRun(int *arg){
       printf("/proc/thread_info does not exist\n");
       return 1;
     }
+    pthread_mutex_lock(&mutex);
     write(fd, data, strlen(data));
     //read(fd, readbuffer, 100);
     //printf("\t%s\n",readbuffer);
     close(fd);
+    pthread_mutex_unlock(&mutex);
     pthread_exit(NULL);
 }
 
@@ -119,6 +124,10 @@ int main(int argc, char *argv[]){
 
     int **childthreadwork=(int**)malloc(sizeof(int*)*threadnum);
 
+    struct timeval start;
+	struct timeval end;
+    gettimeofday(&start,NULL);
+
     for(int a=0;a<threadnum;a++){
         childthreadwork[a]=(int*)malloc(sizeof(int)*4);
         childthreadwork[a][0]=row1;
@@ -147,6 +156,8 @@ int main(int argc, char *argv[]){
         //write(fd, data, 32768);
         pthread_join(t[b], NULL);
     }
+    gettimeofday(&end,NULL);
+
 
     int fd = open("/proc/thread_info", O_RDWR);
     if(fd == -1)
@@ -158,6 +169,8 @@ int main(int argc, char *argv[]){
     read(fd, readbuffer, BUFSIZ);
     printf("%s",readbuffer);
 
+
+    printf("Elapsed time: %ld\n",end.tv_sec-start.tv_sec);
     /*
     for(int i=0;i<row1;i++){
         for(int j=0;j<column2;j++){
